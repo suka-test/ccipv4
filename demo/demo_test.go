@@ -117,7 +117,7 @@ func TestSearchIPB(t *testing.T) {
 
 	c.stdin = strings.NewReader("")
 	c.searchIPB()
-	if !strings.Contains(got.String(), "               IP アドレスではありません。\n") {
+	if !strings.Contains(got.String(), "               IPアドレスではありません。\n") {
 		t.Errorf("searchIPB: invalid message: %s", got.String())
 	}
 	got.Reset()

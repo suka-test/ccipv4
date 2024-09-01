@@ -530,10 +530,10 @@ func (c *cli) getLastAddr() {
 		fmt.Fprintln(c.stdout, "                 "+addr.String())
 	} else {
 		var e string
-		switch err {
-		case ccipv4.ErrFirstArgumentOutOfRange:
+		switch err.Error() {
+		case ccipv4.ERROR_MESSAGE_FIRST_ARGUMENT_OUT_OF_RANGE:
 			e = MSG_NOT_IPV4
-		case ccipv4.ErrSecondArgumentOutOfRange:
+		case ccipv4.ERROR_MESSAGE_SECOND_ARGUMENT_OUT_OF_RANGE:
 			e = MSG_VALUE_OUT_OF_RANGE
 		default:
 			e = MSG_UNEXPECTED_ERROR
@@ -592,10 +592,10 @@ func (c *cli) getValue() {
 		fmt.Fprintf(c.stdout, "                 %d\n", v)
 	} else {
 		var e string
-		switch err {
-		case ccipv4.ErrFirstArgumentOutOfRange:
+		switch err.Error() {
+		case ccipv4.ERROR_MESSAGE_FIRST_ARGUMENT_OUT_OF_RANGE:
 			e = "先頭が" + MSG_NOT_IPV4
-		case ccipv4.ErrSecondArgumentOutOfRange:
+		case ccipv4.ERROR_MESSAGE_SECOND_ARGUMENT_OUT_OF_RANGE:
 			e = "最後が" + MSG_NOT_IPV4
 		default:
 			e = MSG_UNEXPECTED_ERROR

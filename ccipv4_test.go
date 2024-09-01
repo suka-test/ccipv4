@@ -1740,7 +1740,7 @@ func TestGetLastAddr(t *testing.T) {
 	addr, err = GetLastAddr("2001:0db8:3c4d:0015:0000:0000:1a2f:1a2b", 1)
 	if err == nil {
 		t.Errorf("GetLastAddr: addr is invalid, but no error: %v:", addr)
-	} else if err != ErrFirstArgumentOutOfRange {
+	} else if err.Error() != ERROR_MESSAGE_FIRST_ARGUMENT_OUT_OF_RANGE {
 		t.Errorf("GetLastAddr: invalid error: %v:", err)
 	}
 
@@ -1748,7 +1748,7 @@ func TestGetLastAddr(t *testing.T) {
 	addr, err = GetLastAddr("0.0.0.0", 0)
 	if err == nil {
 		t.Errorf("GetLastAddr: value is invalid, but no error: %v:", addr)
-	} else if err != ErrSecondArgumentOutOfRange {
+	} else if err.Error() != ERROR_MESSAGE_SECOND_ARGUMENT_OUT_OF_RANGE {
 		t.Errorf("GetLastAddr: invalid error: %v:", err)
 	}
 
@@ -1756,7 +1756,7 @@ func TestGetLastAddr(t *testing.T) {
 	addr, err = GetLastAddr("0.0.0.0", 4294967296)
 	if err == nil {
 		t.Errorf("GetLastAddr: value is invalid, but no error: %v:", addr)
-	} else if err != ErrSecondArgumentOutOfRange {
+	} else if err.Error() != ERROR_MESSAGE_SECOND_ARGUMENT_OUT_OF_RANGE {
 		t.Errorf("GetLastAddr: invalid error: %v:", err)
 	}
 
@@ -1814,7 +1814,7 @@ func TestGetValue(t *testing.T) {
 	value, err = GetValue("2001:0db8:3c4d:0015:0000:0000:1a2f:1a2c", "0.0.0.0")
 	if err == nil {
 		t.Errorf("GetValue: first address is invalid, but no error: %d:", value)
-	} else if err != ErrFirstArgumentOutOfRange {
+	} else if err.Error() != ERROR_MESSAGE_FIRST_ARGUMENT_OUT_OF_RANGE {
 		t.Errorf("GetValue: invalid error: %v:", err)
 	}
 
@@ -1830,7 +1830,7 @@ func TestGetValue(t *testing.T) {
 	value, err = GetValue("0.0.0.0", "2001:0db8:3c4d:0015:0000:0000:1a2f:1a2d")
 	if err == nil {
 		t.Errorf("GetValue: second address is invalid, but no error: %d:", value)
-	} else if err != ErrSecondArgumentOutOfRange {
+	} else if err.Error() != ERROR_MESSAGE_SECOND_ARGUMENT_OUT_OF_RANGE {
 		t.Errorf("GetValue: invalid error: %v:", err)
 	}
 

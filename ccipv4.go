@@ -24,6 +24,15 @@ const (
 	URL_DELEGATED_ARIN_EXTENDED_LATEST    string = "https://ftp.arin.net/pub/stats/arin/delegated-arin-extended-latest"
 	URL_DELEGATED_LACNIC_EXTENDED_LATEST  string = "https://ftp.lacnic.net/pub/stats/lacnic/delegated-lacnic-extended-latest"
 	URL_DELEGATED_RIPENCC_EXTENDED_LATEST string = "https://ftp.ripe.net/pub/stats/ripencc/delegated-ripencc-extended-latest"
+
+	// エラーメッセージ
+	ERROR_MESSAGE_UNEXPECTED                   string = "unexpected error: %v: %v"
+	ERROR_MESSAGE_WRONG_NUMBER_OF_FIELDS       string = "the number(%d) of the line's fields is invalid: %v"
+	ERROR_MESSAGE_INVALID_IP_ADDRESS           string = "invalid IPv4 address:%v: %v"
+	ERROR_MESSAGE_INVALID_VALUE                string = "invalid value: %v: %v"
+	ERROR_MESSAGE_INVALID_COUNTRY_CODE         string = "the line's first field (country code: %s) is invalid: %v"
+	ERROR_MESSAGE_FIRST_ARGUMENT_OUT_OF_RANGE  string = "first argument out of range"
+	ERROR_MESSAGE_SECOND_ARGUMENT_OUT_OF_RANGE string = "second argument out of range"
 )
 
 type block struct {
@@ -69,24 +78,15 @@ type DB struct {
 	urlRIR []string
 }
 
-var ErrFirstArgumentOutOfRange = errors.New("first argument out of range")
-
-var ErrSecondArgumentOutOfRange = errors.New("second argument out of range")
+var regForCountryCode = regexp.MustCompile(`^[A-Z]{2}$`)
 
 // 初期状態のデータベースを取得する。
 func GetDB() *DB {
-	return &DB{
-		tmpIB: ipBlocks{
-			data:          map[uint8]map[uint8]map[uint8]map[uint8]block{},
-			dicCCIntToStr: map[uint8]string{},
-			dicCCStrToInt: map[string]uint8{},
-			totalBlocks:   map[string]int{"ALL": 0},
-			totalValue:    map[string]int{"ALL": 0},
-		},
+	db := DB{
 		tmpCC: countryCodes{
 			data: map[string]CountryCodeInfo{},
 		},
-		reg: regexp.MustCompile(`^[A-Z]{2}$`),
+		reg: regForCountryCode,
 		urlRIR: []string{
 			URL_DELEGATED_AFRINIC_EXTENDED_LATEST,
 			URL_DELEGATED_APNIC_EXTENDED_LATEST,
@@ -95,7 +95,9 @@ func GetDB() *DB {
 			URL_DELEGATED_RIPENCC_EXTENDED_LATEST,
 		},
 	}
+	db.ClearTmpIPBData()
 
+	return &db
 }
 
 // 一時保存用データベースを空データベースにする。
@@ -142,7 +144,7 @@ func (db *DB) setTmpIPBlocks(r io.Reader) error {
 				}
 				if len(line) < 6 || !strings.Contains(err.Error(), "wrong number of fields") {
 					db.ClearTmpIPBData()
-					return fmt.Errorf("%v: %v", err, line)
+					return fmt.Errorf(ERROR_MESSAGE_UNEXPECTED, err, line)
 				}
 			}
 		}
@@ -157,14 +159,14 @@ func (db *DB) setTmpIPBlocks(r io.Reader) error {
 			// Record format の Field の個数は7以上。
 			if len(line) < 7 {
 				db.ClearTmpIPBData()
-				return fmt.Errorf("the number(%d) of the line's fields is invalid: %v", len(line), line)
+				return fmt.Errorf(ERROR_MESSAGE_WRONG_NUMBER_OF_FIELDS, len(line), line)
 			}
 			// Record format の４番めの Field は start 。
 			// 対象範囲の最初のアドレスを示す。
 			ad, err := netip.ParseAddr(line[3])
 			if err != nil {
 				db.ClearTmpIPBData()
-				return fmt.Errorf("%v: %v", err, line)
+				return fmt.Errorf(ERROR_MESSAGE_INVALID_IP_ADDRESS, err, line)
 			}
 			// 検索に使用するため、start のアドレスを８ビットで分割し、
 			// ipBlocks のマップのキーとする。
@@ -207,7 +209,7 @@ func (db *DB) setTmpIPBlocks(r io.Reader) error {
 				}
 			} else {
 				db.ClearTmpIPBData()
-				return fmt.Errorf("%v: %v", err, line)
+				return fmt.Errorf(ERROR_MESSAGE_INVALID_VALUE, err, line)
 			}
 		}
 	}
@@ -242,18 +244,18 @@ func (db *DB) SetTmpCountryCodes(r io.Reader) error {
 				break
 			} else {
 				db.tmpCC.data = map[string]CountryCodeInfo{}
-				return fmt.Errorf("%v: %v", err, line)
+				return fmt.Errorf(ERROR_MESSAGE_UNEXPECTED, err, line)
 			}
 		}
 		// フィールド数は３。
 		if len(line) != 3 {
 			db.tmpCC.data = map[string]CountryCodeInfo{}
-			return fmt.Errorf("the number(%d) of the line's fields is invalid: %v", len(line), line)
+			return fmt.Errorf(ERROR_MESSAGE_WRONG_NUMBER_OF_FIELDS, len(line), line)
 		}
 		// 先頭フィールドがカントリーコードで、英大文字２文字。
 		if !db.reg.MatchString(line[0]) {
 			db.tmpCC.data = map[string]CountryCodeInfo{}
-			return fmt.Errorf("the line's first field (country code: %s) is invalid: %v", line[0], line)
+			return fmt.Errorf(ERROR_MESSAGE_INVALID_COUNTRY_CODE, line[0], line)
 		}
 
 		// カントリーコードをキーとする listCCName に
@@ -493,17 +495,20 @@ func (db *DB) searchBlockStart(addr netip.Addr) [4]byte {
 	// IPv4アドレスを8ビット単位で分割し、
 	// データベースから所属ブロック候補を検索
 	as4 := addr.As4()
-	f := 2
+
+	// 検索する8ビット単位の範囲を指定
+	checkLevel := 2
+
 	found := true
 	for {
-		if f == 2 {
+		if checkLevel == 2 {
 			as4, found = db.checkFirst8Bit(as4)
 			if !found {
 				return [4]byte{}
 			}
 		}
 
-		if f >= 1 {
+		if checkLevel >= 1 {
 			as4, found = db.checkSecond8Bit(as4)
 			if !found {
 				if as4[0] == 0 {
@@ -513,7 +518,7 @@ func (db *DB) searchBlockStart(addr netip.Addr) [4]byte {
 				as4[1] = 255
 				as4[2] = 255
 				as4[3] = 255
-				f = 2
+				checkLevel = 2
 				continue
 			}
 		}
@@ -528,13 +533,13 @@ func (db *DB) searchBlockStart(addr netip.Addr) [4]byte {
 				as4[1] = 255
 				as4[2] = 255
 				as4[3] = 255
-				f = 2
+				checkLevel = 2
 				continue
 			}
 			as4[1]--
 			as4[2] = 255
 			as4[3] = 255
-			f = 1
+			checkLevel = 1
 			continue
 		}
 
@@ -551,18 +556,18 @@ func (db *DB) searchBlockStart(addr netip.Addr) [4]byte {
 				as4[1] = 255
 				as4[2] = 255
 				as4[3] = 255
-				f = 2
+				checkLevel = 2
 				continue
 			}
 			as4[1]--
 			as4[2] = 255
 			as4[3] = 255
-			f = 1
+			checkLevel = 1
 			continue
 		}
 		as4[2]--
 		as4[3] = 255
-		f = 0
+		checkLevel = 0
 	}
 }
 
@@ -650,11 +655,11 @@ func GetLastAddr(adrs string, value int) (netip.Addr, error) {
 	}
 	// IPv4アドレスでない
 	if !target.Is4() {
-		return netip.Addr{}, ErrFirstArgumentOutOfRange
+		return netip.Addr{}, errors.New(ERROR_MESSAGE_FIRST_ARGUMENT_OUT_OF_RANGE)
 	}
 
 	if value < 1 || value > 4294967295 {
-		return netip.Addr{}, ErrSecondArgumentOutOfRange
+		return netip.Addr{}, errors.New(ERROR_MESSAGE_SECOND_ARGUMENT_OUT_OF_RANGE)
 	}
 
 	return getOneOutside(target.As4(), uint32(value)).Prev(), nil
@@ -670,7 +675,7 @@ func GetValue(a string, b string) (int, error) {
 	}
 	// IPv4アドレスでない
 	if !x.Is4() {
-		return 0, ErrFirstArgumentOutOfRange
+		return 0, errors.New(ERROR_MESSAGE_FIRST_ARGUMENT_OUT_OF_RANGE)
 	}
 
 	y, err := netip.ParseAddr(b)
@@ -680,7 +685,7 @@ func GetValue(a string, b string) (int, error) {
 	}
 	// IPv4アドレスでない
 	if !y.Is4() {
-		return 0, ErrSecondArgumentOutOfRange
+		return 0, errors.New(ERROR_MESSAGE_SECOND_ARGUMENT_OUT_OF_RANGE)
 	}
 
 	i := x.Compare(y)
