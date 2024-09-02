@@ -273,7 +273,6 @@ type cli struct {
 	stdin  io.Reader
 	db     *ccipv4.DB
 	cc     string
-	rir    [][]string
 }
 
 // struct cli の実体を一つ作り、
@@ -285,7 +284,6 @@ func main() {
 		stdin:  os.Stdin,
 		db:     ccipv4.GetDB(),
 		cc:     COUNTRY_CODES,
-		rir:    getRIRURL(),
 	}
 
 	fmt.Fprintln(c.stdout, "")
@@ -406,37 +404,21 @@ func (c *cli) getCommand() {
 func (c *cli) loadIPBD() {
 	var err error
 	fmt.Fprintln(c.stdout, "                 \x1b[47m \x1b[30mデータベースを更新します。                \x1b[0m")
+	fmt.Fprintln(c.stdout, "                 \x1b[47m \x1b[30m少々お待ちください。                      \x1b[0m")
 	fmt.Fprintln(c.stdout, "")
-	for i := range c.rir {
-		fmt.Fprintf(c.stdout, "     %-7s からデータをダウンロードします。 >>> ", c.rir[i][0])
-		t := time.Now()
-		if err = c.db.LoadIPBDataByURL(c.rir[i][1]); err != nil {
-			break
-		}
-		fmt.Fprintf(c.stdout, "経過時間 : %10f秒\n", time.Since(t).Seconds())
-	}
-	if err != nil {
-		c.db.ClearTmpIPBData()
+
+	t := time.Now()
+	if err = c.db.SetIPBData(); err != nil {
 		fmt.Fprintln(c.stdout, "")
-		fmt.Fprintln(c.stdout, "")
+		fmt.Fprintf(c.stdout, "%v\n", err)
 		fmt.Fprintf(c.stdout, "                 \x1b[41m !! %-19s !! \x1b[0m\n", MSG_UNEXPECTED_ERROR)
 		fmt.Fprintf(c.stdout, "                 \x1b[41m %-23s \x1b[0m\n", "データベースを更新できませんでした。")
 		return
 	}
-	c.db.SwitchIPBData()
+	fmt.Fprintf(c.stdout, "                 経過時間 : %10f秒\n", time.Since(t).Seconds())
+
 	fmt.Fprintln(c.stdout, "")
 	fmt.Fprintln(c.stdout, "                 \x1b[47m \x1b[30mデータベース更新、終了しました。          \x1b[0m")
-}
-
-// 各 RIR の最新版 delegation file の URL を取得する。
-func getRIRURL() [][]string {
-	return [][]string{
-		{"AFRINIC", ccipv4.URL_DELEGATED_AFRINIC_EXTENDED_LATEST},
-		{"APNIC", ccipv4.URL_DELEGATED_APNIC_EXTENDED_LATEST},
-		{"ARIN", ccipv4.URL_DELEGATED_ARIN_EXTENDED_LATEST},
-		{"LACNIC", ccipv4.URL_DELEGATED_LACNIC_EXTENDED_LATEST},
-		{"RIPENCC", ccipv4.URL_DELEGATED_RIPENCC_EXTENDED_LATEST},
-	}
 }
 
 // 検索
@@ -531,9 +513,9 @@ func (c *cli) getLastAddr() {
 	} else {
 		var e string
 		switch err.Error() {
-		case ccipv4.ERROR_MESSAGE_FIRST_ARGUMENT_OUT_OF_RANGE:
+		case ccipv4.ErrorMessageFirstArgumentOutOfRange:
 			e = MSG_NOT_IPV4
-		case ccipv4.ERROR_MESSAGE_SECOND_ARGUMENT_OUT_OF_RANGE:
+		case ccipv4.ErrorMessageSecondArgumentOutOfRange:
 			e = MSG_VALUE_OUT_OF_RANGE
 		default:
 			e = MSG_UNEXPECTED_ERROR
@@ -593,10 +575,12 @@ func (c *cli) getValue() {
 	} else {
 		var e string
 		switch err.Error() {
-		case ccipv4.ERROR_MESSAGE_FIRST_ARGUMENT_OUT_OF_RANGE:
+
+		case ccipv4.ErrorMessageFirstArgumentOutOfRange:
 			e = "先頭が" + MSG_NOT_IPV4
-		case ccipv4.ERROR_MESSAGE_SECOND_ARGUMENT_OUT_OF_RANGE:
+		case ccipv4.ErrorMessageSecondArgumentOutOfRange:
 			e = "最後が" + MSG_NOT_IPV4
+
 		default:
 			e = MSG_UNEXPECTED_ERROR
 		}

@@ -1,6 +1,7 @@
 package ccipv4
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/csv"
 	"errors"
@@ -15,24 +16,26 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
 const (
 	// 各 RIR の最新版 delegation file の URL
-	URL_DELEGATED_AFRINIC_EXTENDED_LATEST string = "https://ftp.afrinic.net/pub/stats/afrinic/delegated-afrinic-extended-latest"
-	URL_DELEGATED_APNIC_EXTENDED_LATEST   string = "https://ftp.apnic.net/stats/apnic/delegated-apnic-extended-latest"
-	URL_DELEGATED_ARIN_EXTENDED_LATEST    string = "https://ftp.arin.net/pub/stats/arin/delegated-arin-extended-latest"
-	URL_DELEGATED_LACNIC_EXTENDED_LATEST  string = "https://ftp.lacnic.net/pub/stats/lacnic/delegated-lacnic-extended-latest"
-	URL_DELEGATED_RIPENCC_EXTENDED_LATEST string = "https://ftp.ripe.net/pub/stats/ripencc/delegated-ripencc-extended-latest"
-
+	URLDelegatedAfrinicExtendedLatest string = "https://ftp.afrinic.net/pub/stats/afrinic/delegated-afrinic-extended-latest"
+	URLDelegatedApnicExtendedLatest   string = "https://ftp.apnic.net/stats/apnic/delegated-apnic-extended-latest"
+	URLDelegatedArinExtendedLatest    string = "https://ftp.arin.net/pub/stats/arin/delegated-arin-extended-latest"
+	URLDelegatedLacnicExtendedLatest  string = "https://ftp.lacnic.net/pub/stats/lacnic/delegated-lacnic-extended-latest"
+	URLDelegatedRipenccExtendedLatest string = "https://ftp.ripe.net/pub/stats/ripencc/delegated-ripencc-extended-latest"
 	// エラーメッセージ
-	ERROR_MESSAGE_UNEXPECTED                   string = "unexpected error: %v: %v"
-	ERROR_MESSAGE_WRONG_NUMBER_OF_FIELDS       string = "the number(%d) of the line's fields is invalid: %v"
-	ERROR_MESSAGE_INVALID_IP_ADDRESS           string = "invalid IPv4 address:%v: %v"
-	ERROR_MESSAGE_INVALID_VALUE                string = "invalid value: %v: %v"
-	ERROR_MESSAGE_INVALID_COUNTRY_CODE         string = "the line's first field (country code: %s) is invalid: %v"
-	ERROR_MESSAGE_FIRST_ARGUMENT_OUT_OF_RANGE  string = "first argument out of range"
-	ERROR_MESSAGE_SECOND_ARGUMENT_OUT_OF_RANGE string = "second argument out of range"
+	ErrorMessageUnexpected               string = "unexpected error: %v: %v"
+	ErrorMessageWrongNumberOfFields      string = "the number(%d) of the line's fields is invalid: %v"
+	ErrorMessageInvalidIPAddress         string = "invalid ipv4 address:%v: %v"
+	ErrorMessageInvalidValue             string = "invalid value: %v: %v"
+	ErrorMessageInvalidCountryCode       string = "the line's first field (country code: %s) is invalid: %v"
+	ErrorMessageFirstArgumentOutOfRange  string = "first argument out of range"
+	ErrorMessageSecondArgumentOutOfRange string = "second argument out of range"
 )
 
 type block struct {
@@ -82,17 +85,17 @@ var regForCountryCode = regexp.MustCompile(`^[A-Z]{2}$`)
 
 // 初期状態のデータベースを取得する。
 func GetDB() *DB {
-	db := DB{
+	var db DB = DB{
 		tmpCC: countryCodes{
 			data: map[string]CountryCodeInfo{},
 		},
 		reg: regForCountryCode,
 		urlRIR: []string{
-			URL_DELEGATED_AFRINIC_EXTENDED_LATEST,
-			URL_DELEGATED_APNIC_EXTENDED_LATEST,
-			URL_DELEGATED_ARIN_EXTENDED_LATEST,
-			URL_DELEGATED_LACNIC_EXTENDED_LATEST,
-			URL_DELEGATED_RIPENCC_EXTENDED_LATEST,
+			URLDelegatedRipenccExtendedLatest,
+			URLDelegatedApnicExtendedLatest,
+			URLDelegatedArinExtendedLatest,
+			URLDelegatedLacnicExtendedLatest,
+			URLDelegatedAfrinicExtendedLatest,
 		},
 	}
 	db.ClearTmpIPBData()
@@ -113,19 +116,23 @@ func (db *DB) ClearTmpIPBData() {
 // RIR statistics exchange format については下記を参照。
 // http://www.apnic.net/db/rir-stats-format.html
 func (db *DB) setTmpIPBlocks(r io.Reader) error {
+	var (
+		countForDic uint8
+		reader      *csv.Reader = csv.NewReader(r)
+		group8Bits  []byte      = make([]byte, 4)
+	)
+	// ファイルを csv として読込。
+	// format に従い、コメント・フィールド区切りの文字を設定。
+	reader.Comment = '#'
+	reader.Comma = '|'
+
 	// データベースロック
 	db.tmpIB.l.Lock()
 	defer db.tmpIB.l.Unlock()
 
 	// カントリーコード文字列にひも付けする uint8 用の値（後述）を
 	// 設定するために使用。
-	countForDic := uint8(len(db.tmpIB.dicCCStrToInt))
-
-	// ファイルを csv として読込。
-	// format に従い、コメント・フィールド区切りの文字を設定。
-	reader := csv.NewReader(r)
-	reader.Comment = '#'
-	reader.Comma = '|'
+	countForDic = uint8(len(db.tmpIB.dicCCStrToInt))
 
 	// ファイルを一行単位で読込。
 	// 異常が発生した場合はその行で処理を中止し、
@@ -144,7 +151,7 @@ func (db *DB) setTmpIPBlocks(r io.Reader) error {
 				}
 				if len(line) < 6 || !strings.Contains(err.Error(), "wrong number of fields") {
 					db.ClearTmpIPBData()
-					return fmt.Errorf(ERROR_MESSAGE_UNEXPECTED, err, line)
+					return fmt.Errorf(ErrorMessageUnexpected, err, line)
 				}
 			}
 		}
@@ -159,18 +166,18 @@ func (db *DB) setTmpIPBlocks(r io.Reader) error {
 			// Record format の Field の個数は7以上。
 			if len(line) < 7 {
 				db.ClearTmpIPBData()
-				return fmt.Errorf(ERROR_MESSAGE_WRONG_NUMBER_OF_FIELDS, len(line), line)
+				return fmt.Errorf(ErrorMessageWrongNumberOfFields, len(line), line)
 			}
 			// Record format の４番めの Field は start 。
 			// 対象範囲の最初のアドレスを示す。
 			ad, err := netip.ParseAddr(line[3])
 			if err != nil {
 				db.ClearTmpIPBData()
-				return fmt.Errorf(ERROR_MESSAGE_INVALID_IP_ADDRESS, err, line)
+				return fmt.Errorf(ErrorMessageInvalidIPAddress, err, line)
 			}
 			// 検索に使用するため、start のアドレスを８ビットで分割し、
 			// ipBlocks のマップのキーとする。
-			group8Bits := ad.AsSlice()
+			group8Bits = ad.AsSlice()
 			if _, ok := db.tmpIB.data[group8Bits[0]]; !ok {
 				db.tmpIB.data[group8Bits[0]] = map[uint8]map[uint8]map[uint8]block{}
 			}
@@ -209,7 +216,7 @@ func (db *DB) setTmpIPBlocks(r io.Reader) error {
 				}
 			} else {
 				db.ClearTmpIPBData()
-				return fmt.Errorf(ERROR_MESSAGE_INVALID_VALUE, err, line)
+				return fmt.Errorf(ErrorMessageInvalidValue, err, line)
 			}
 		}
 	}
@@ -224,18 +231,19 @@ func (db *DB) setTmpIPBlocks(r io.Reader) error {
 
 // カントリーコードの一覧ファイルを読み込む。
 func (db *DB) SetTmpCountryCodes(r io.Reader) error {
+	var reader *csv.Reader = csv.NewReader(r)
+
+	// ファイルを csv として読込。
+	// コメント・フィールド区切りの文字を設定。
+	reader.Comment = '#'
+	reader.Comma = '|'
+
 	db.tmpCC.l.Lock()
 	defer db.tmpCC.l.Unlock()
 
 	if db.tmpCC.data == nil {
 		db.tmpCC.data = map[string]CountryCodeInfo{}
 	}
-
-	// ファイルを csv として読込。
-	// コメント・フィールド区切りの文字を設定。
-	reader := csv.NewReader(r)
-	reader.Comment = '#'
-	reader.Comma = '|'
 
 	for {
 		line, err := reader.Read()
@@ -244,18 +252,18 @@ func (db *DB) SetTmpCountryCodes(r io.Reader) error {
 				break
 			} else {
 				db.tmpCC.data = map[string]CountryCodeInfo{}
-				return fmt.Errorf(ERROR_MESSAGE_UNEXPECTED, err, line)
+				return fmt.Errorf(ErrorMessageUnexpected, err, line)
 			}
 		}
 		// フィールド数は３。
 		if len(line) != 3 {
 			db.tmpCC.data = map[string]CountryCodeInfo{}
-			return fmt.Errorf(ERROR_MESSAGE_WRONG_NUMBER_OF_FIELDS, len(line), line)
+			return fmt.Errorf(ErrorMessageWrongNumberOfFields, len(line), line)
 		}
 		// 先頭フィールドがカントリーコードで、英大文字２文字。
 		if !db.reg.MatchString(line[0]) {
 			db.tmpCC.data = map[string]CountryCodeInfo{}
-			return fmt.Errorf(ERROR_MESSAGE_INVALID_COUNTRY_CODE, line[0], line)
+			return fmt.Errorf(ErrorMessageInvalidCountryCode, line[0], line)
 		}
 
 		// カントリーコードをキーとする listCCName に
@@ -272,18 +280,30 @@ func (db *DB) SetTmpCountryCodes(r io.Reader) error {
 // 指定された URL のデータを取得し、
 // 一時保存用データベースに格納する。
 func (db *DB) LoadIPBDataByURL(u string) error {
+	var c *http.Client = &http.Client{
+		Timeout: 60 * time.Second,
+	}
+
 	// 指定された URL が適正なものかを確認
 	if _, err := url.ParseRequestURI(u); err != nil {
 		return err
 	}
 
-	resp, err := http.Get(u)
+	// URL からデータを取得する。
+	resp, err := c.Get(u)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 
-	err = db.setTmpIPBlocks(resp.Body)
+	// レスポンスのボディはを全て読み取ってバッファに格納する。
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	// 一時保存用データベースに書き込む。
+	err = db.setTmpIPBlocks(bytes.NewBuffer(b))
 	if err != nil {
 		return err
 	}
@@ -328,13 +348,22 @@ func (db *DB) SwitchIPBData() {
 // 初期設定済の URL から各 RIR の最新版 delegation file を取得し、
 // IPアドレスの国別ブロックデータベースを更新する。
 func (db *DB) SetIPBData() error {
+	var g errgroup.Group
+
+	g.SetLimit(3)
 
 	for i := range db.urlRIR {
-		if err := db.LoadIPBDataByURL(db.urlRIR[i]); err != nil {
-			return err
-		}
+		x := i
+		g.Go(func() error {
+			return db.LoadIPBDataByURL(db.urlRIR[x])
+		})
 	}
-
+	if err := g.Wait(); err != nil {
+		db.tmpIB.l.Lock()
+		defer db.tmpIB.l.Unlock()
+		db.ClearTmpIPBData()
+		return err
+	}
 	db.SwitchIPBData()
 
 	return nil
@@ -492,14 +521,19 @@ func (db *DB) checkLast8Bit(as4 [4]byte) ([4]byte, bool) {
 }
 
 func (db *DB) searchBlockStart(addr netip.Addr) [4]byte {
-	// IPv4アドレスを8ビット単位で分割し、
-	// データベースから所属ブロック候補を検索
-	as4 := addr.As4()
+	var (
+		// IPv4アドレスを8ビット単位で分割し、
+		// データベースから所属ブロック候補を検索
+		as4 [4]byte = addr.As4()
+		// 検索する8ビット単位の範囲を指定
+		checkLevel int = 2
+		// 検索結果有無
+		found bool = true
+	)
 
-	// 検索する8ビット単位の範囲を指定
-	checkLevel := 2
+	db.ib.l.RLock()
+	defer db.ib.l.RUnlock()
 
-	found := true
 	for {
 		if checkLevel == 2 {
 			as4, found = db.checkFirst8Bit(as4)
@@ -573,10 +607,10 @@ func (db *DB) searchBlockStart(addr netip.Addr) [4]byte {
 
 // 渡された文字列のIPv4アドレスからカントリーコードの情報を返す。
 func (db *DB) SearchInfo(adrs string) SearchResult {
-	db.ib.l.RLock()
-	defer db.ib.l.RUnlock()
-	db.cc.l.RLock()
-	defer db.cc.l.RUnlock()
+	var (
+		as4 [4]byte
+		oO  netip.Addr
+	)
 
 	target, err := netip.ParseAddr(adrs)
 	// 渡された文字列をパースしてエラー
@@ -601,13 +635,15 @@ func (db *DB) SearchInfo(adrs string) SearchResult {
 	}
 
 	// IPv4アドレスを8ビット単位で分割し、データベースから所属ブロック候補を検索
-	as4 := db.searchBlockStart(target)
+	as4 = db.searchBlockStart(target)
 	if as4 == [4]byte{} {
 		return SearchResult{Message: "Not Found"}
 	}
 
 	// 所属ブロック候補の最後のアドレスを計算
-	oO := getOneOutside(as4, db.ib.data[as4[0]][as4[1]][as4[2]][as4[3]].value)
+	db.ib.l.RLock()
+	defer db.ib.l.RUnlock()
+	oO = getOneOutside(as4, db.ib.data[as4[0]][as4[1]][as4[2]][as4[3]].value)
 
 	// 渡されたIPv4アドレスが所属ブロック候補の範囲に含まれる場合は、
 	// カントリーコード他該当情報を返す。
@@ -619,6 +655,8 @@ func (db *DB) SearchInfo(adrs string) SearchResult {
 			BlockEnd:   oO.Prev().String(),
 			Code:       db.ib.dicCCIntToStr[db.ib.data[as4[0]][as4[1]][as4[2]][as4[3]].country],
 		}
+		db.cc.l.RLock()
+		defer db.cc.l.RUnlock()
 		if _, ok := db.cc.data[sr.Code]; ok {
 			sr.Name = db.cc.data[sr.Code].Name
 			sr.AltName = db.cc.data[sr.Code].AltName
@@ -637,7 +675,8 @@ func (db *DB) SearchInfo(adrs string) SearchResult {
 // 変換された RIR statistics exchange format の value の値から
 // ブロック範囲外最初の IP アドレスを計算して返す。
 func getOneOutside(a4b [4]byte, value uint32) netip.Addr {
-	s4b := []byte{a4b[0], a4b[1], a4b[2], a4b[3]}
+	var s4b []byte = make([]byte, 4)
+	s4b = []byte{a4b[0], a4b[1], a4b[2], a4b[3]}
 	binary.BigEndian.PutUint32(s4b, binary.BigEndian.Uint32(s4b)+value)
 	return netip.AddrFrom4([4]byte{s4b[0], s4b[1], s4b[2], s4b[3]})
 }
@@ -655,11 +694,11 @@ func GetLastAddr(adrs string, value int) (netip.Addr, error) {
 	}
 	// IPv4アドレスでない
 	if !target.Is4() {
-		return netip.Addr{}, errors.New(ERROR_MESSAGE_FIRST_ARGUMENT_OUT_OF_RANGE)
+		return netip.Addr{}, errors.New(ErrorMessageFirstArgumentOutOfRange)
 	}
 
 	if value < 1 || value > 4294967295 {
-		return netip.Addr{}, errors.New(ERROR_MESSAGE_SECOND_ARGUMENT_OUT_OF_RANGE)
+		return netip.Addr{}, errors.New(ErrorMessageSecondArgumentOutOfRange)
 	}
 
 	return getOneOutside(target.As4(), uint32(value)).Prev(), nil
@@ -675,7 +714,7 @@ func GetValue(a string, b string) (int, error) {
 	}
 	// IPv4アドレスでない
 	if !x.Is4() {
-		return 0, errors.New(ERROR_MESSAGE_FIRST_ARGUMENT_OUT_OF_RANGE)
+		return 0, errors.New(ErrorMessageFirstArgumentOutOfRange)
 	}
 
 	y, err := netip.ParseAddr(b)
@@ -685,7 +724,7 @@ func GetValue(a string, b string) (int, error) {
 	}
 	// IPv4アドレスでない
 	if !y.Is4() {
-		return 0, errors.New(ERROR_MESSAGE_SECOND_ARGUMENT_OUT_OF_RANGE)
+		return 0, errors.New(ErrorMessageSecondArgumentOutOfRange)
 	}
 
 	i := x.Compare(y)

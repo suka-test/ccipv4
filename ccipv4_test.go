@@ -98,19 +98,19 @@ func TestGetDB(t *testing.T) {
 	if db.reg.MatchString("aa") || db.reg.MatchString("BCD") || !db.reg.MatchString("YZ") {
 		t.Error("GetDB: reg is invalid")
 	}
-	if db.urlRIR[0] != URL_DELEGATED_AFRINIC_EXTENDED_LATEST {
+	if db.urlRIR[0] != URLDelegatedRipenccExtendedLatest {
 		t.Errorf("GetDB: urlRIR[0] is invalid: %s", db.urlRIR[0])
 	}
-	if db.urlRIR[1] != URL_DELEGATED_APNIC_EXTENDED_LATEST {
+	if db.urlRIR[1] != URLDelegatedApnicExtendedLatest {
 		t.Errorf("GetDB: urlRIR[1] is invalid: %s", db.urlRIR[1])
 	}
-	if db.urlRIR[2] != URL_DELEGATED_ARIN_EXTENDED_LATEST {
+	if db.urlRIR[2] != URLDelegatedArinExtendedLatest {
 		t.Errorf("GetDB: urlRIR[2] is invalid: %s", db.urlRIR[2])
 	}
-	if db.urlRIR[3] != URL_DELEGATED_LACNIC_EXTENDED_LATEST {
+	if db.urlRIR[3] != URLDelegatedLacnicExtendedLatest {
 		t.Errorf("GetDB: urlRIR[3] is invalid: %s", db.urlRIR[3])
 	}
-	if db.urlRIR[4] != URL_DELEGATED_RIPENCC_EXTENDED_LATEST {
+	if db.urlRIR[4] != URLDelegatedAfrinicExtendedLatest {
 		t.Errorf("GetDB: urlRIR[4] is invalid: %s", db.urlRIR[4])
 	}
 
@@ -1518,81 +1518,46 @@ func TestSetIPBData(t *testing.T) {
 		}
 		if _, ok := db.ib.data[41][0][0][0]; !ok {
 			t.Error("SetIPBData: ib.data[41][0][0][0] doesn't exist")
-		} else {
-			if db.ib.data[41][0][0][0].country != 0 {
-				t.Errorf("SetIPBData: ib.data[41][0][0][0].country want 0, but got %d", db.ib.data[41][0][0][0].country)
-			}
-			if db.ib.data[41][0][0][0].value != 2097152 {
-				t.Errorf("SetIPBData: ib.data[41][0][0][0].ipCidr want 2097152, but got %d", db.ib.data[41][0][0][0].value)
-			}
+		} else if db.ib.data[41][0][0][0].value != 2097152 {
+			t.Errorf("SetIPBData: ib.data[41][0][0][0].ipCidr want 2097152, but got %d", db.ib.data[41][0][0][0].value)
 		}
 		if _, ok := db.ib.data[1][0][0][0]; !ok {
 			t.Error("SetIPBData: ib.data[1][0][0][0] doesn't exist")
-		} else {
-			if db.ib.data[1][0][0][0].country != 1 {
-				t.Errorf("SetIPBData: ib.data[1][0][0][0].country want 1, but got %d", db.ib.data[1][0][0][0].country)
-			}
-			if db.ib.data[1][0][0][0].value != 256 {
-				t.Errorf("SetIPBData: ib.data[1][0][0][0].ipCidr want 256, but got %d", db.ib.data[1][0][0][0].value)
-			}
+		} else if db.ib.data[1][0][0][0].value != 256 {
+			t.Errorf("SetIPBData: ib.data[1][0][0][0].ipCidr want 256, but got %d", db.ib.data[1][0][0][0].value)
 		}
 		if _, ok := db.ib.data[2][57][164][0]; !ok {
 			t.Error("SetIPBData: ib.data[2][57][164][0] doesn't exist")
-		} else {
-			if db.ib.data[2][57][164][0].country != 2 {
-				t.Errorf("SetIPBData: ib.data[2][57][164][0].country want 2, but got %d", db.ib.data[2][57][164][0].country)
-			}
-			if db.ib.data[2][57][164][0].value != 1024 {
-				t.Errorf("SetIPBData: ib.data[2][57][164][0].ipCidr want 1024, but got %d", db.ib.data[2][57][164][0].value)
-			}
+		} else if db.ib.data[2][57][164][0].value != 1024 {
+			t.Errorf("SetIPBData: ib.data[2][57][164][0].ipCidr want 1024, but got %d", db.ib.data[2][57][164][0].value)
 		}
 		if _, ok := db.ib.data[5][183][80][0]; !ok {
 			t.Error("SetIPBData: ib.data[5][183][80][0] doesn't exist")
-		} else {
-			if db.ib.data[5][183][80][0].country != 3 {
-				t.Errorf("SetIPBData: ib.data[5][183][80][0].country want 3, but got %d", db.ib.data[5][183][80][0].country)
-			}
-			if db.ib.data[5][183][80][0].value != 1024 {
-				t.Errorf("SetIPBData: ib.data[5][183][80][0].ipCidr want 1024, but got %d", db.ib.data[5][183][80][0].value)
-			}
+		} else if db.ib.data[5][183][80][0].value != 1024 {
+			t.Errorf("SetIPBData: ib.data[5][183][80][0].ipCidr want 1024, but got %d", db.ib.data[5][183][80][0].value)
 		}
 		if _, ok := db.ib.data[1][178][112][0]; !ok {
 			t.Error("SetIPBData: ib.data[1][178][112][0] doesn't exist")
-		} else {
-			if db.ib.data[1][178][112][0].country != 4 {
-				t.Errorf("SetIPBData: ib.data[1][178][112][0].country want 4, but got %d", db.ib.data[1][178][112][0].country)
-			}
-			if db.ib.data[1][178][112][0].value != 4096 {
-				t.Errorf("SetIPBData: ib.data[1][178][112][0].ipCidr want 4096, but got %d", db.ib.data[1][178][112][0].value)
-			}
+		} else if db.ib.data[1][178][112][0].value != 4096 {
+			t.Errorf("SetIPBData: ib.data[1][178][112][0].ipCidr want 4096, but got %d", db.ib.data[1][178][112][0].value)
 		}
 		if len(db.ib.dicCCStrToInt) != 5 {
 			t.Errorf("SetIPBData: ib.dicCCStrToInt length want 5, but %d: %v", len(db.ib.dicCCStrToInt), db.ib.dicCCStrToInt)
 		} else {
 			if _, ok := db.ib.dicCCStrToInt["ZA"]; !ok {
 				t.Error("SetIPBData: ib.dicCCStrToInt[ZA] doesn't exist")
-			} else if db.ib.dicCCStrToInt["ZA"] != 0 {
-				t.Errorf("SetIPBData: ib.dicCCStrToInt[ZA] want 0, but %d", db.ib.dicCCStrToInt["ZA"])
 			}
 			if _, ok := db.ib.dicCCStrToInt["AU"]; !ok {
 				t.Error("SetIPBData: ib.dicCCStrToInt[AU] doesn't exist")
-			} else if db.ib.dicCCStrToInt["AU"] != 1 {
-				t.Errorf("SetIPBData: ib.dicCCStrToInt[AU] want 1, but %d", db.ib.dicCCStrToInt["AU"])
 			}
 			if _, ok := db.ib.dicCCStrToInt["US"]; !ok {
 				t.Error("SetIPBData: ib.dicCCStrToInt[US] doesn't exist")
-			} else if db.ib.dicCCStrToInt["US"] != 2 {
-				t.Errorf("SetIPBData: ib.dicCCStrToInt[US] want 2, but %d", db.ib.dicCCStrToInt["US"])
 			}
 			if _, ok := db.ib.dicCCStrToInt["DO"]; !ok {
 				t.Error("SetIPBData: ib.dicCCStrToInt[DO] doesn't exist")
-			} else if db.ib.dicCCStrToInt["DO"] != 3 {
-				t.Errorf("SetIPBData: ib.dicCCStrToInt[DO] want 3, but %d", db.ib.dicCCStrToInt["DO"])
 			}
 			if _, ok := db.ib.dicCCStrToInt["PS"]; !ok {
 				t.Error("SetIPBData: ib.dicCCStrToInt[PS] doesn't exist")
-			} else if db.ib.dicCCStrToInt["PS"] != 4 {
-				t.Errorf("SetIPBData: ib.dicCCStrToInt[PS] want 4, but %d", db.ib.dicCCStrToInt["PS"])
 			}
 		}
 		if len(db.ib.dicCCIntToStr) != 5 {
@@ -1600,28 +1565,18 @@ func TestSetIPBData(t *testing.T) {
 		} else {
 			if _, ok := db.ib.dicCCIntToStr[0]; !ok {
 				t.Error("SetIPBData: ib.dicCCIntToStr[0] doesn't exist")
-			} else if db.ib.dicCCIntToStr[0] != "ZA" {
-				t.Errorf("SetIPBData: ib.dicCCIntToStr[0] want ZA, but %s", db.ib.dicCCIntToStr[0])
 			}
 			if _, ok := db.ib.dicCCIntToStr[1]; !ok {
 				t.Error("SetIPBData: ib.dicCCIntToStr[1] doesn't exist")
-			} else if db.ib.dicCCIntToStr[1] != "AU" {
-				t.Errorf("SetIPBData: ib.dicCCIntToStr[1] want AU, but %s", db.ib.dicCCIntToStr[1])
 			}
 			if _, ok := db.ib.dicCCIntToStr[2]; !ok {
 				t.Error("SetIPBData: ib.dicCCIntToStr[2] doesn't exist")
-			} else if db.ib.dicCCIntToStr[2] != "US" {
-				t.Errorf("SetIPBData: ib.dicCCIntToStr[2] want US, but %s", db.ib.dicCCIntToStr[2])
 			}
 			if _, ok := db.ib.dicCCIntToStr[3]; !ok {
 				t.Error("SetIPBData: ib.dicCCIntToStr[3] doesn't exist")
-			} else if db.ib.dicCCIntToStr[3] != "DO" {
-				t.Errorf("SetIPBData: ib.dicCCIntToStr[3] want DO, but %s", db.ib.dicCCIntToStr[3])
 			}
 			if _, ok := db.ib.dicCCIntToStr[4]; !ok {
 				t.Error("SetIPBData: ib.dicCCIntToStr[4] doesn't exist")
-			} else if db.ib.dicCCIntToStr[4] != "PS" {
-				t.Errorf("SetIPBData: ib.dicCCIntToStr[4] want PS, but %s", db.ib.dicCCIntToStr[4])
 			}
 		}
 		if len(db.ib.totalBlocks) != 6 {
@@ -1740,7 +1695,7 @@ func TestGetLastAddr(t *testing.T) {
 	addr, err = GetLastAddr("2001:0db8:3c4d:0015:0000:0000:1a2f:1a2b", 1)
 	if err == nil {
 		t.Errorf("GetLastAddr: addr is invalid, but no error: %v:", addr)
-	} else if err.Error() != ERROR_MESSAGE_FIRST_ARGUMENT_OUT_OF_RANGE {
+	} else if err.Error() != ErrorMessageFirstArgumentOutOfRange {
 		t.Errorf("GetLastAddr: invalid error: %v:", err)
 	}
 
@@ -1748,7 +1703,7 @@ func TestGetLastAddr(t *testing.T) {
 	addr, err = GetLastAddr("0.0.0.0", 0)
 	if err == nil {
 		t.Errorf("GetLastAddr: value is invalid, but no error: %v:", addr)
-	} else if err.Error() != ERROR_MESSAGE_SECOND_ARGUMENT_OUT_OF_RANGE {
+	} else if err.Error() != ErrorMessageSecondArgumentOutOfRange {
 		t.Errorf("GetLastAddr: invalid error: %v:", err)
 	}
 
@@ -1756,7 +1711,7 @@ func TestGetLastAddr(t *testing.T) {
 	addr, err = GetLastAddr("0.0.0.0", 4294967296)
 	if err == nil {
 		t.Errorf("GetLastAddr: value is invalid, but no error: %v:", addr)
-	} else if err.Error() != ERROR_MESSAGE_SECOND_ARGUMENT_OUT_OF_RANGE {
+	} else if err.Error() != ErrorMessageSecondArgumentOutOfRange {
 		t.Errorf("GetLastAddr: invalid error: %v:", err)
 	}
 
@@ -1814,7 +1769,7 @@ func TestGetValue(t *testing.T) {
 	value, err = GetValue("2001:0db8:3c4d:0015:0000:0000:1a2f:1a2c", "0.0.0.0")
 	if err == nil {
 		t.Errorf("GetValue: first address is invalid, but no error: %d:", value)
-	} else if err.Error() != ERROR_MESSAGE_FIRST_ARGUMENT_OUT_OF_RANGE {
+	} else if err.Error() != ErrorMessageFirstArgumentOutOfRange {
 		t.Errorf("GetValue: invalid error: %v:", err)
 	}
 
@@ -1830,7 +1785,7 @@ func TestGetValue(t *testing.T) {
 	value, err = GetValue("0.0.0.0", "2001:0db8:3c4d:0015:0000:0000:1a2f:1a2d")
 	if err == nil {
 		t.Errorf("GetValue: second address is invalid, but no error: %d:", value)
-	} else if err.Error() != ERROR_MESSAGE_SECOND_ARGUMENT_OUT_OF_RANGE {
+	} else if err.Error() != ErrorMessageSecondArgumentOutOfRange {
 		t.Errorf("GetValue: invalid error: %v:", err)
 	}
 

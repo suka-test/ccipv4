@@ -49,41 +49,11 @@ func TestLoadIPBD(t *testing.T) {
 		db:     ccipv4.GetDB(),
 	}
 
-	// テスト機で http://127.0.0.1 が
-	// 動作していない場合のみ行う
-	_, err := http.Get("http://127.0.0.1")
-	if err != nil {
-		// 指定された URL でエラー
-		c.rir = [][]string{{"testRIR", "http://127.0.0.1"}}
-		c.loadIPBD()
-		if !strings.Contains(got.String(), "データベースを更新できませんでした。") {
-			t.Errorf("getCommand: there are not the strings: %s", got.String())
-		}
-		got.Reset()
-	}
-
-	mux := http.NewServeMux()
-	mux.HandleFunc(
-		"/afrinic",
-		func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprintln(w, "afrinic|ZA|ipv4|41.0.0.0|2097152|20071126|allocated")
-		},
-	)
-	mux.HandleFunc(
-		"/apnic",
-		func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprintln(w, "apnic|AU|ipv4|1.0.0.0|256|20110811|assigned")
-		},
-	)
-	ts := httptest.NewServer(mux)
-	defer ts.Close()
-
-	c.rir = [][]string{
-		{"afrinic", ts.URL + "/afrinic"},
-		{"apnic", ts.URL + "/apnic"},
-	}
 	c.loadIPBD()
-	if !strings.Contains(got.String(), "apnic   からデータをダウンロードします。 >>> 経過時間 : ") {
+	if !strings.Contains(got.String(), "データベースを更新します。") {
+		t.Errorf("getCommand: there are not the strings: %s", got.String())
+	}
+	if !strings.Contains(got.String(), "データベース更新、終了しました。") {
 		t.Errorf("getCommand: there are not the strings: %s", got.String())
 	}
 
